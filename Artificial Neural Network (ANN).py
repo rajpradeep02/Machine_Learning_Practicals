@@ -1,75 +1,52 @@
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
-
-from sklearn.linear_model import LinearRegression
+from sklearn import datasets
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.feature_selection import RFE
+from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score
+from sklearn.cluster import AgglomerativeClustering
+from scipy.cluster.hierarchy import dendrogram, linkage
 
-# Dataset
-experience = np.array([
-    1.1, 1.3, 1.5, 2.0, 2.2,
-    2.9, 3.0, 3.2, 3.7, 4.0,
-    4.5, 5.1, 5.9, 6.8, 7.9,
-    8.2, 9.0, 9.6, 10.3, 10.5
-]).reshape(-1,1)
+# Load dataset
+wine = datasets.load_wine()
+X = wine.data
+y = wine.target
 
-salary = np.array([
-    3.9, 4.6, 4.8, 5.6, 6.0,
-    6.5, 6.8, 7.4, 7.9, 8.2,
-    9.3, 10.4, 11.5, 12.6, 14.2,
-    15.0, 16.5, 17.3, 18.4, 18.9
-])
+# Scaling
+X = StandardScaler().fit_transform(X)
 
-# Train-Test Split (80/20)
+# Feature Selection
+rfe = RFE(SVC(kernel='linear'), n_features_to_select=6)
+X = rfe.fit_transform(X, y)
+
+# Split data
 X_train, X_test, y_train, y_test = train_test_split(
-    experience,
-    salary,
-    test_size=0.2,
-    random_state=42
+    X, y, test_size=0.25, random_state=42
 )
 
-# Create Model
-model = LinearRegression()
+# SVM Models
+models = {
+    "Linear": SVC(kernel='linear'),
+    "Poly": SVC(kernel='poly'),
+    "RBF": SVC(kernel='rbf')
+}
 
-# Train Model
-model.fit(X_train, y_train)
+# Accuracy check
+for name, model in models.items():
+    model.fit(X_train, y_train)
+    pred = model.predict(X_test)
+    print(name, "Accuracy =", accuracy_score(y_test, pred))
 
-# Slope and Intercept
-print("Slope :", model.coef_[0])
-print("Intercept :", model.intercept_)
-
-# Prediction for 6.5 years experience
-pred_salary = model.predict([[6.5]])
-
-print("Predicted Salary for 6.5 years experience :",
-      pred_salary[0], "Lakhs")
-
-# Predictions on test set
-y_pred = model.predict(X_test)
-
-# Metrics
-mse = mean_squared_error(y_test, y_pred)
-
-rmse = np.sqrt(mse)
-
-r2 = r2_score(y_test, y_pred)
-
-print("\nMSE :", mse)
-print("RMSE :", rmse)
-print("R2 Score :", r2)
-
-# Plot
-plt.scatter(experience, salary, color='blue')
-
-plt.plot(
-    experience,
-    model.predict(experience),
-    color='red'
-)
-
-plt.xlabel("Years of Experience")
-plt.ylabel("Salary (Lakhs)")
-plt.title("Simple Linear Regression")
-
+# Dendrogram
+linked = linkage(X, 'ward')
+dendrogram(linked)
 plt.show()
+
+# Agglomerative Clustering
+agg = AgglomerativeClustering(n_clusters=3)
+labels = agg.fit_predict(X)
+
+print("Cluster Labels:")
+print(labels)
