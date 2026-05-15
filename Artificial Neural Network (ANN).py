@@ -1,40 +1,73 @@
-from sklearn.datasets import load_breast_cancer
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.neural_network import MLPClassifier
+# ===========================
+# Q1. K-Means Clustering
+# ===========================
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn.datasets import make_blobs
+from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import (accuracy_score, confusion_matrix,
-                             classification_report, roc_auc_score)
- 
-data = load_breast_cancer()
-X, y = data.data, data.target
- 
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
- 
-X_train, X_test, y_train, y_test = train_test_split(
-    X_scaled, y, test_size=0.2, random_state=42)
- 
-# ANN with 2 hidden layers
-model = MLPClassifier(
-    hidden_layer_sizes=(64, 32),
-    activation='relu',
-    solver='adam',
-    max_iter=500,
+from sklearn.metrics import silhouette_score
+
+# Generate synthetic dataset
+X, y = make_blobs(
+    n_samples=500,
+    centers=4,
+    cluster_std=0.80,
     random_state=42
 )
-model.fit(X_train, y_train)
-y_pred = model.predict(X_test)
-y_prob = model.predict_proba(X_test)[:, 1]
- 
-acc = accuracy_score(y_test, y_pred)
-cm  = confusion_matrix(y_test, y_pred)
-tn, fp, fn, tp = cm.ravel()
-auc = roc_auc_score(y_test, y_prob)
-cv  = cross_val_score(model, X_scaled, y, cv=5)
- 
-print(f"Accuracy:    {acc:.4f}")
-print(f"TP={tp}, TN={tn}, FP={fp}, FN={fn}")
-print(f"AUC:         {auc:.4f}")
-print(f"5-Fold CV:   {cv.mean():.4f} +/- {cv.std():.4f}")
-print("\nClassification Report:\n",
-      classification_report(y_test, y_pred, target_names=['Malignant','Benign']))
+
+# Apply Standard Scaling
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# Elbow Method
+inertia_values = []
+
+for k in range(1, 11):
+    kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+    kmeans.fit(X_scaled)
+    inertia_values.append(kmeans.inertia_)
+
+# Plot Elbow Curve
+plt.figure(figsize=(8,5))
+plt.plot(range(1,11), inertia_values, marker='o')
+plt.title("Elbow Method")
+plt.xlabel("Number of Clusters (K)")
+plt.ylabel("Inertia")
+plt.grid(True)
+plt.show()
+
+# Choose optimal K
+optimal_k = 4
+
+# Train KMeans with optimal K
+kmeans = KMeans(n_clusters=optimal_k, random_state=42, n_init=10)
+clusters = kmeans.fit_predict(X_scaled)
+
+# Plot clusters
+plt.figure(figsize=(8,6))
+plt.scatter(X_scaled[:,0], X_scaled[:,1], c=clusters, cmap='viridis')
+
+# Plot cluster centers
+centers = kmeans.cluster_centers_
+plt.scatter(
+    centers[:,0],
+    centers[:,1],
+    c='red',
+    s=300,
+    marker='X',
+    label='Centroids'
+)
+
+plt.title("K-Means Clustering")
+plt.legend()
+plt.show()
+
+# Final Inertia
+print("Final Inertia :", kmeans.inertia_)
+
+# Silhouette Score
+sil_score = silhouette_score(X_scaled, clusters)
+print("Silhouette Score :", sil_score)
