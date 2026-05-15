@@ -2,160 +2,74 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from sklearn import datasets
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.preprocessing import StandardScaler
-from sklearn.feature_selection import RFE
-from sklearn.svm import SVC
-from sklearn.metrics import (
-    accuracy_score,
-    f1_score,
-    confusion_matrix,
-    roc_auc_score
-)
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score
 
-from sklearn.cluster import AgglomerativeClustering
-from scipy.cluster.hierarchy import dendrogram, linkage
+# Dataset
+experience = np.array([
+    1.1, 1.3, 1.5, 2.0, 2.2,
+    2.9, 3.0, 3.2, 3.7, 4.0,
+    4.5, 5.1, 5.9, 6.8, 7.9,
+    8.2, 9.0, 9.6, 10.3, 10.5
+]).reshape(-1,1)
 
-# Load Wine Dataset
-wine = datasets.load_wine()
+salary = np.array([
+    3.9, 4.6, 4.8, 5.6, 6.0,
+    6.5, 6.8, 7.4, 7.9, 8.2,
+    9.3, 10.4, 11.5, 12.6, 14.2,
+    15.0, 16.5, 17.3, 18.4, 18.9
+])
 
-X = wine.data
-y = wine.target
-feature_names = wine.feature_names
-
-# ===========================
-# (xix) Apply Standard Scaling
-# ===========================
-
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
-
-# ===========================
-# (xx) Feature Reduction using RFE
-# ===========================
-
-svc_linear = SVC(kernel='linear')
-
-rfe = RFE(estimator=svc_linear, n_features_to_select=6)
-X_rfe = rfe.fit_transform(X_scaled, y)
-
-selected_features = np.array(feature_names)[rfe.support_]
-
-print("Top 6 Features:")
-for f in selected_features:
-    print(f)
-
-# ===========================
-# (xxi) Train-Test Split
-# ===========================
-
+# Train-Test Split (80/20)
 X_train, X_test, y_train, y_test = train_test_split(
-    X_rfe,
-    y,
-    test_size=0.25,
-    stratify=y,
+    experience,
+    salary,
+    test_size=0.2,
     random_state=42
 )
 
-# ===========================
-# (xxii) Train SVM Models
-# ===========================
+# Create Model
+model = LinearRegression()
 
-models = {
-    "Linear": SVC(kernel='linear', probability=True),
-    "Polynomial": SVC(kernel='poly', degree=3, probability=True),
-    "RBF": SVC(kernel='rbf', probability=True)
-}
+# Train Model
+model.fit(X_train, y_train)
 
-# ===========================
-# (xxiii) Tune RBF Parameters
-# ===========================
+# Slope and Intercept
+print("Slope :", model.coef_[0])
+print("Intercept :", model.intercept_)
 
-param_grid = {
-    'C': [0.1, 1, 10, 100],
-    'gamma': [0.001, 0.01, 0.1, 1]
-}
+# Prediction for 6.5 years experience
+pred_salary = model.predict([[6.5]])
 
-grid = GridSearchCV(
-    SVC(kernel='rbf'),
-    param_grid,
-    cv=5
+print("Predicted Salary for 6.5 years experience :",
+      pred_salary[0], "Lakhs")
+
+# Predictions on test set
+y_pred = model.predict(X_test)
+
+# Metrics
+mse = mean_squared_error(y_test, y_pred)
+
+rmse = np.sqrt(mse)
+
+r2 = r2_score(y_test, y_pred)
+
+print("\nMSE :", mse)
+print("RMSE :", rmse)
+print("R2 Score :", r2)
+
+# Plot
+plt.scatter(experience, salary, color='blue')
+
+plt.plot(
+    experience,
+    model.predict(experience),
+    color='red'
 )
 
-grid.fit(X_train, y_train)
+plt.xlabel("Years of Experience")
+plt.ylabel("Salary (Lakhs)")
+plt.title("Simple Linear Regression")
 
-print("\nBest Parameters for RBF:")
-print(grid.best_params_)
-
-# Replace RBF model with best estimator
-models["RBF"] = grid.best_estimator_
-
-# ===========================
-# (xxiv) Evaluation
-# ===========================
-
-best_kernel = ""
-best_accuracy = 0
-
-for name, model in models.items():
-
-    model.fit(X_train, y_train)
-
-    y_pred = model.predict(X_test)
-
-    acc = accuracy_score(y_test, y_pred)
-
-    f1 = f1_score(y_test, y_pred, average='macro')
-
-    cm = confusion_matrix(y_test, y_pred)
-
-    # One-vs-Rest AUC
-    y_prob = model.predict_proba(X_test)
-
-    auc = roc_auc_score(
-        y_test,
-        y_prob,
-        multi_class='ovr'
-    )
-
-    print("\n======================")
-    print("Kernel :", name)
-    print("======================")
-
-    print("Accuracy :", acc)
-    print("Macro F1 Score :", f1)
-    print("Confusion Matrix :")
-    print(cm)
-    print("OVR AUC :", auc)
-
-    if acc > best_accuracy:
-        best_accuracy = acc
-        best_kernel = name
-
-print("\nBest Performing Kernel :", best_kernel)
-
-# ===========================
-# (xxv) Agglomerative Clustering
-# ===========================
-
-# Dendrogram
-linked = linkage(X_scaled, method='ward')
-
-plt.figure(figsize=(10,6))
-dendrogram(linked)
-plt.title("Dendrogram")
-plt.xlabel("Samples")
-plt.ylabel("Distance")
 plt.show()
-
-# Agglomerative Clustering
-agg = AgglomerativeClustering(
-    n_clusters=3,
-    linkage='ward'
-)
-
-clusters = agg.fit_predict(X_scaled)
-
-print("\nAgglomerative Clustering Labels:")
-print(clusters)
