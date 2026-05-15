@@ -1,73 +1,161 @@
-# ===========================
-# Q1. K-Means Clustering
-# ===========================
-
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
-from sklearn.datasets import make_blobs
-from sklearn.cluster import KMeans
+from sklearn import datasets
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import silhouette_score
-
-# Generate synthetic dataset
-X, y = make_blobs(
-    n_samples=500,
-    centers=4,
-    cluster_std=0.80,
-    random_state=42
+from sklearn.feature_selection import RFE
+from sklearn.svm import SVC
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    confusion_matrix,
+    roc_auc_score
 )
 
-# Apply Standard Scaling
+from sklearn.cluster import AgglomerativeClustering
+from scipy.cluster.hierarchy import dendrogram, linkage
+
+# Load Wine Dataset
+wine = datasets.load_wine()
+
+X = wine.data
+y = wine.target
+feature_names = wine.feature_names
+
+# ===========================
+# (xix) Apply Standard Scaling
+# ===========================
+
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# Elbow Method
-inertia_values = []
+# ===========================
+# (xx) Feature Reduction using RFE
+# ===========================
 
-for k in range(1, 11):
-    kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-    kmeans.fit(X_scaled)
-    inertia_values.append(kmeans.inertia_)
+svc_linear = SVC(kernel='linear')
 
-# Plot Elbow Curve
-plt.figure(figsize=(8,5))
-plt.plot(range(1,11), inertia_values, marker='o')
-plt.title("Elbow Method")
-plt.xlabel("Number of Clusters (K)")
-plt.ylabel("Inertia")
-plt.grid(True)
-plt.show()
+rfe = RFE(estimator=svc_linear, n_features_to_select=6)
+X_rfe = rfe.fit_transform(X_scaled, y)
 
-# Choose optimal K
-optimal_k = 4
+selected_features = np.array(feature_names)[rfe.support_]
 
-# Train KMeans with optimal K
-kmeans = KMeans(n_clusters=optimal_k, random_state=42, n_init=10)
-clusters = kmeans.fit_predict(X_scaled)
+print("Top 6 Features:")
+for f in selected_features:
+    print(f)
 
-# Plot clusters
-plt.figure(figsize=(8,6))
-plt.scatter(X_scaled[:,0], X_scaled[:,1], c=clusters, cmap='viridis')
+# ===========================
+# (xxi) Train-Test Split
+# ===========================
 
-# Plot cluster centers
-centers = kmeans.cluster_centers_
-plt.scatter(
-    centers[:,0],
-    centers[:,1],
-    c='red',
-    s=300,
-    marker='X',
-    label='Centroids'
+X_train, X_test, y_train, y_test = train_test_split(
+    X_rfe,
+    y,
+    test_size=0.25,
+    stratify=y,
+    random_state=42
 )
 
-plt.title("K-Means Clustering")
-plt.legend()
+# ===========================
+# (xxii) Train SVM Models
+# ===========================
+
+models = {
+    "Linear": SVC(kernel='linear', probability=True),
+    "Polynomial": SVC(kernel='poly', degree=3, probability=True),
+    "RBF": SVC(kernel='rbf', probability=True)
+}
+
+# ===========================
+# (xxiii) Tune RBF Parameters
+# ===========================
+
+param_grid = {
+    'C': [0.1, 1, 10, 100],
+    'gamma': [0.001, 0.01, 0.1, 1]
+}
+
+grid = GridSearchCV(
+    SVC(kernel='rbf'),
+    param_grid,
+    cv=5
+)
+
+grid.fit(X_train, y_train)
+
+print("\nBest Parameters for RBF:")
+print(grid.best_params_)
+
+# Replace RBF model with best estimator
+models["RBF"] = grid.best_estimator_
+
+# ===========================
+# (xxiv) Evaluation
+# ===========================
+
+best_kernel = ""
+best_accuracy = 0
+
+for name, model in models.items():
+
+    model.fit(X_train, y_train)
+
+    y_pred = model.predict(X_test)
+
+    acc = accuracy_score(y_test, y_pred)
+
+    f1 = f1_score(y_test, y_pred, average='macro')
+
+    cm = confusion_matrix(y_test, y_pred)
+
+    # One-vs-Rest AUC
+    y_prob = model.predict_proba(X_test)
+
+    auc = roc_auc_score(
+        y_test,
+        y_prob,
+        multi_class='ovr'
+    )
+
+    print("\n======================")
+    print("Kernel :", name)
+    print("======================")
+
+    print("Accuracy :", acc)
+    print("Macro F1 Score :", f1)
+    print("Confusion Matrix :")
+    print(cm)
+    print("OVR AUC :", auc)
+
+    if acc > best_accuracy:
+        best_accuracy = acc
+        best_kernel = name
+
+print("\nBest Performing Kernel :", best_kernel)
+
+# ===========================
+# (xxv) Agglomerative Clustering
+# ===========================
+
+# Dendrogram
+linked = linkage(X_scaled, method='ward')
+
+plt.figure(figsize=(10,6))
+dendrogram(linked)
+plt.title("Dendrogram")
+plt.xlabel("Samples")
+plt.ylabel("Distance")
 plt.show()
 
-# Final Inertia
-print("Final Inertia :", kmeans.inertia_)
+# Agglomerative Clustering
+agg = AgglomerativeClustering(
+    n_clusters=3,
+    linkage='ward'
+)
 
-# Silhouette Score
-sil_score = silhouette_score(X_scaled, clusters)
-print("Silhouette Score :", sil_score)
+clusters = agg.fit_predict(X_scaled)
+
+print("\nAgglomerative Clustering Labels:")
+print(clusters)
